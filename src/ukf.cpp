@@ -63,7 +63,16 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
             unsigned int i = 0;
             if (meas_package.sensor_type_ == 0 and use_laser_) {
-                x_ << meas_package.raw_measurements_(0), meas_package.raw_measurements_(1), 0, 0, 0;
+                float p_x = meas_package.raw_measurements_(0);
+                float p_y = meas_package.raw_measurements_(1);
+                if (abs(p_x) < 0.001 && abs(p_y) < 0.001)
+                {
+                    x_ << 0.001, 0.001, 0, 0, 0;
+                }
+                else
+                {
+                    x_ << p_x, p_x, 0, 0, 0;
+                }
                 P_ = MatrixXd::Identity(5, 5);
                 P_(1, 1) = 0.15 * 0.15;
                 P_(0, 0) = 0.15 * 0.15;
@@ -79,6 +88,17 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
                 is_initialized_ = true;
             }
             time_us_ = meas_package.timestamp_;
+
+            R_laser_ = MatrixXd(2,2);
+            R_laser_ << std_laspx_ * std_laspx_, 0,
+                            0,      std_laspy_ * std_laspy_;
+
+            R_radar_ = MatrixXd(3,3);
+            R_radar_ << std_radr_ * std_radr_, 0, 0 ,
+                        0,      std_radphi_ * std_radphi_, 0,
+                        0 ,       0, std_radrd_ * std_radrd_;
+
+
 
             //covariance of the process noise initialization
             Q_ = MatrixXd(number_indp_noise_processes_, number_indp_noise_processes_) * 0;
@@ -253,70 +273,24 @@ void UKF::Prediction(double delta_t) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-
+  /*Linear model Linear kalman filtering*/
   unsigned n_z = 2;
   VectorXd Z = VectorXd(n_z) *0;
   Z << meas_package.raw_measurements_(0),meas_package.raw_measurements_(1);
-  //create matrix for sigma points in measurement space
-  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1)*0;
 
-  //mean predicted measurement
-  VectorXd z_pred = VectorXd(n_z) * 0;
+  VectorXd Z_pred = VectorXd(n_z) * 0;
+  MatrixXd H = MatrixXd(n_z,n_x_) * 0;
+  H << 1 ,0,0,0,0,
+       0, 1,0,0,0;
 
-  //measurement covariance matrix S
-  MatrixXd S = MatrixXd(n_z,n_z);
+  Z_pred = H * x_;
+  MatrixXd S = MatrixXd(n_z,n_z)*0;
+  S =  H * P_ * H.transpose() + R_laser_;
+  MatrixXd k_g = MatrixXd(n_x_, n_z)*0;
+  k_g = P_ * H.transpose() * S.inverse();
 
-  //transform sigma points into measurement space
-  for(unsigned int i = 0; i < 2*n_aug_ +1; i++ )
-  {
-    //Predict measurements
-    Zsig.col(i)(0) = Xsig_pred_.col(i)(0);
-    Zsig.col(i)(1) = Xsig_pred_.col(i)(1);
-
-    //Accumulate the mean
-    z_pred = z_pred + (weights_(i) * Zsig.col(i));
-
-  }
-  //calculate mean predicted measurement
-  //calculate measurement covariance matrix S
-  for (unsigned int i = 0; i < n_aug_ + 1 ; i++)
-  {
-    //signma point matrix is antisymmetric around n_aug + 1
-    if(i == 0)
-    {
-      S = weights_(i) * ((Zsig.col(i) - z_pred) * (Zsig.col(i) - z_pred).transpose());
-    }
-    else
-    {
-      S = S + weights_(i) * ((Zsig.col(i) - z_pred) * (Zsig.col(i) - z_pred).transpose());
-      S = S + weights_(i + n_aug_ ) * ((Zsig.col(i + n_aug_) - z_pred) * (Zsig.col(i + n_aug_) - z_pred).transpose());
-    }
-  }
-  MatrixXd R = MatrixXd(n_z,n_z) * 0;
-  R << std_laspx_ * std_laspx_, 0,
-          0,      std_laspy_ * std_laspy_;
-
-
-  S = S + R;
-
-  //create matrix for cross correlation Tc
-  MatrixXd  Tc = MatrixXd(n_x_, n_z) * 0;
-
-  //calculate cross correlation matrix
-  Tc =  weights_(0) * (Xsig_pred_.col(0) - x_) * (Zsig.col(0) - z_pred).transpose();
-  for(unsigned int i = 1; i < n_aug_ + 1; i++)
-  {
-    Tc = Tc + weights_(i) * (Xsig_pred_.col(i) - x_) * (Zsig.col(i) - z_pred).transpose();
-    Tc = Tc + weights_(i + n_aug_) * (Xsig_pred_.col(i+ n_aug_) - x_) * (Zsig.col(i+ n_aug_) - z_pred).transpose();
-  }
-  //calculate Kalman gain K;
-  MatrixXd k_g = MatrixXd(n_x_, n_z);
-  k_g = Tc * S.inverse();
-  VectorXd innovation = (Z - z_pred);
-  //update state mean and covariance matrix
-  x_ =x_ + k_g*innovation;
-  P_ = P_ - k_g * S * k_g.transpose();
-
+  x_ = x_ + (k_g *(Z-Z_pred)) ;
+  P_ = P_ - k_g * H* P_;
 
 #ifdef print_measurement_predictions
     cout << "Z      :" << Z(0) << " " << Z(1)  << endl;
@@ -324,6 +298,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 #endif
 
 #ifdef NIS_test
+  VectorXd innovation = (Z-Z_pred);
   NIS_lidar_ = innovation.transpose() * S.inverse() * innovation;
   NIS_lidar_text_ << NIS_lidar_  <<endl;
 #endif
@@ -351,10 +326,25 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   for(unsigned int i = 0; i < 2*n_aug_ +1; i++ )
   {
     //Predict measurements
-    Zsig.col(i)(0) = sqrt(Xsig_pred_.col(i)(0) * Xsig_pred_.col(i)(0) + Xsig_pred_.col(i)(1) * Xsig_pred_.col(i)(1));
-    Zsig.col(i)(1) = atan2(Xsig_pred_.col(i)(1) , Xsig_pred_.col(i)(0));
-    Zsig.col(i)(2) = (Xsig_pred_.col(i)(0) * Xsig_pred_.col(i)(2) * cos(Xsig_pred_.col(i)(3)) + Xsig_pred_.col(i)(1) * Xsig_pred_.col(i)(2) * sin(Xsig_pred_.col(i)(3)))/ Zsig.col(i)(0);
+      float x = Xsig_pred_.col(i)(0);
+      float y = Xsig_pred_.col(i)(1);
 
+    Zsig.col(i)(0) = sqrt(Xsig_pred_.col(i)(0) * Xsig_pred_.col(i)(0) + Xsig_pred_.col(i)(1) * Xsig_pred_.col(i)(1));
+    if (x == 0 && y == 0)
+    {
+        Zsig.col(i)(1) = 0;
+    }
+    else
+    {
+        Zsig.col(i)(1) = atan2(Xsig_pred_.col(i)(1) , Xsig_pred_.col(i)(0));
+    }
+    if(Zsig.col(i)(1) < 0.001)
+    {
+        Zsig.col(i)(2) = 0;
+    } else{
+        Zsig.col(i)(2) = (Xsig_pred_.col(i)(0) * Xsig_pred_.col(i)(2) * cos(Xsig_pred_.col(i)(3)) + Xsig_pred_.col(i)(1) * Xsig_pred_.col(i)(2) * sin(Xsig_pred_.col(i)(3)))/ Zsig.col(i)(0);
+
+    }
     //Accumulate the mean
     z_pred = z_pred + (weights_(i) * Zsig.col(i));
 
@@ -385,12 +375,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
       S = S + weights_(i + n_aug_ ) * (innovation * innovation.transpose());
     }
   }
-  MatrixXd R = MatrixXd(n_z,n_z) * 0;
-  R << std_radr_ * std_radr_, 0, 0 ,
-          0,      std_radphi_ * std_radphi_, 0,
-          0 ,       0, std_radrd_ * std_radrd_;
 
-  S = S + R;
+  S = S + R_radar_;
 
   //create matrix for cross correlation Tc
   MatrixXd  Tc = MatrixXd(n_x_, n_z) * 0;
