@@ -4,7 +4,9 @@
 #include <math.h>
 #include "ukf.h"
 #include "tools.h"
+#include "defines.h"
 
+//#define prints
 using namespace std;
 
 // for convenience
@@ -86,6 +88,9 @@ int main()
           		iss >> ro;
           		iss >> theta;
           		iss >> ro_dot;
+              while(theta > M_PI) theta = theta - (2*M_PI);
+              while(theta < -M_PI) theta = theta + (2*M_PI);
+
           		meas_package.raw_measurements_ << ro,theta, ro_dot;
           		iss >> timestamp;
           		meas_package.timestamp_ = timestamp;
@@ -129,6 +134,9 @@ int main()
 
     	  VectorXd RMSE = tools.CalculateRMSE(estimations, ground_truth);
 
+#ifdef print_rmse
+            cout << "RMSE :" << RMSE(0) << " " << RMSE(1) << " " << RMSE(2) << " " << RMSE(3) << endl;
+#endif
           json msgJson;
           msgJson["estimate_x"] = p_x;
           msgJson["estimate_y"] = p_y;
@@ -136,6 +144,10 @@ int main()
           msgJson["rmse_y"] =  RMSE(1);
           msgJson["rmse_vx"] = RMSE(2);
           msgJson["rmse_vy"] = RMSE(3);
+//            msgJson["rmse_x"] =  0;
+//            msgJson["rmse_y"] =  0;
+//            msgJson["rmse_vx"] = 0;
+//            msgJson["rmse_vy"] = 0;
           auto msg = "42[\"estimate_marker\"," + msgJson.dump() + "]";
           // std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
