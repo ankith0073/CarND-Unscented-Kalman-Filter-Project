@@ -6,7 +6,9 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include "defines.h"
 
+using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
@@ -27,6 +29,9 @@ public:
 
   ///* state covariance matrix
   MatrixXd P_;
+
+  //augmented sigma points
+  MatrixXd Xsig_aug_;
 
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
@@ -66,6 +71,19 @@ public:
 
   ///* Sigma point spreading parameter
   double lambda_;
+
+    unsigned int number_indp_noise_processes_ = 2;
+     MatrixXd Q_;
+#ifdef print_iterations_
+    int iterations_;
+#endif
+
+#ifdef NIS_test
+  float NIS_lidar_;
+  float NIS_radar_;
+  //Text files to accumulate NIS or lidar and radar
+  ofstream NIS_lidar_text_, NIS_radar_text_;
+#endif
 
 
   /**
