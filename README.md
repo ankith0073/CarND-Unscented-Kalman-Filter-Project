@@ -1,6 +1,6 @@
 # Unscented Kalman Filter Project Starter Code
 
-Please note :- Unscentd kalman filter covariance matrices go non positive definite, Replace UKF with square root UKF or a SVD based UKF to assure numerically stable unscented kalman filter.
+Please note :- Unscented kalman filter covariance matrices go non positive definite, Replace UKF with square root UKF or a SVD based UKF to assure numerically stable unscented kalman filter.
 
 Self-Driving Car Engineer Nanodegree Program
 
