@@ -1,4 +1,7 @@
 # Unscented Kalman Filter Project Starter Code
+
+Please note :- Unscentd kalman filter covariance matrices go non positive definite, Replace UKF with square root UKF or a SVD based UKF to assure numerically stable unscented kalman filter.
+
 Self-Driving Car Engineer Nanodegree Program
 
 In this project utilize an Unscented Kalman Filter to estimate the state of a moving object of interest with noisy lidar and radar measurements. Passing the project requires obtaining RMSE values that are lower that the tolerance outlined in the project reburic. 
